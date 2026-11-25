@@ -1,0 +1,20 @@
+# Reference numerical environment: Python 3.9 on Linux x86_64, CPU only.
+--extra-index-url https://download.pytorch.org/whl/cpu
+numpy==1.21.5
+scipy==1.9.1
+scikit-learn==1.0.2
+torch==2.0.1+cpu
+numba==0.55.1
+llvmlite==0.38.0
+threadpoolctl==2.2.0
+joblib==1.1.0
+typing-extensions==4.3.0
+sympy==1.10.1
+mpmath==1.2.1
+networkx==2.8.4
+Jinja2==2.11.3
+MarkupSafe==2.0.1
+filelock==3.6.0
+six==1.16.0
+# Read the GAMA binary tables. PDF plotting uses a separate environment below (README).
+astropy==5.1

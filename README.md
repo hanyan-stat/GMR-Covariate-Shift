@@ -1,113 +1,79 @@
-# GMR-Covariate-Shift
+# Reproducing the simulations and GAMA case study
 
-This repository contains the public code for reproducing the simulation study
-and empirical air-quality case study in the paper on Statistical Inference for General
-Moment Restrictions under Covariate Shift Transfer Learning.
+This directory contains the analyses for *Semiparametric inference with parameter-indexed
+conditional moments under covariate shift*. Run the commands below from `Code/`.
 
-The code is organized so that reusable methodology is kept in `main_code/`,
-simulation-specific code is kept in `simulation/`, and empirical-study code and
-outputs are kept in `case_study/`.
+## Files
 
-## Requirements
+- In `simulation/`, `simulate.py` and `supplement.py` run the main and supplementary experiments.
+  `nuisance.py` fits nuisance models, `inference.py` constructs confidence sets, and
+  `drf_interface.R` fits distributional random forests for both analyses.
+- In `case_study/`, `run.py` prepares the GAMA sample and runs the analyses.
+  `pointwise_inference.py` estimates the two Table 4 parameters, `quantile_band.py` constructs
+  the simultaneous band, and `plot.py` draws Figure 1.
+- `requirements.txt` lists the Python package versions used for both analyses.
 
-The code was developed in Python and requires:
+## Setup
 
-```bash
-python3 -m pip install numpy pandas scipy matplotlib torch
+The analyses used Python 3.9.13 and R 4.4.2 on 64-bit Linux. Install the Python
+dependencies with `python -m pip install -r requirements.txt`. Put `Rscript` and GNU
+`timeout` on your `PATH`. In R, install the packages used for the forest fits.
+
+```r
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+install.packages("remotes")
+versions <- c(Rcpp = "1.1.2", RcppEigen = "0.3.4.0.2", Matrix = "1.6-5",
+              fastDummies = "1.7.6", transport = "0.15-4", drf = "1.3.0")
+for (p in names(versions)) {
+  remotes::install_version(p, version = versions[[p]], upgrade = "never")
+}
 ```
 
-PyTorch uses `cuda` when available, then `mps` on Apple Silicon, and otherwise
-falls back to `cpu`.
+## Simulations
 
+The six methods use the same simulated data in each replication. Tables 1–2 compare
+absolute error, coverage and interval length for the median and Max10 at four sample sizes.
+Table 3 reports RMSE, joint coverage and running time for seven quantiles.
 
+```sh
+python -B -m simulation.simulate run --experiment all --replications 500 --workers 24 > main-sim.jsonl
+python -B -m simulation.simulate summarize main-sim.jsonl --latex
 
-## Repository Structure
+# Supplementary tables on source correction, sample size and band calibration
+python -B -m simulation.supplement run --replications 500 --workers 1 > extra-sim.jsonl
+python -B -m simulation.supplement tables extra-sim.jsonl
+```
 
-### Top-level files
+The main run used 24 workers on a machine with 64 virtual CPUs and 128 GB of RAM.
+Use `--workers 1` if memory is limited. To check the installation against archived
+results, run `python -B -m simulation.simulate check --workers 1`.
 
-- `README.md`: this file.
-- `.gitignore`: excludes generated caches, Python bytecode, temporary files,
-  and operating-system metadata from version control.
+## GAMA case study
 
-### `main_code/`
+The fitting commands download and verify two public GAMA DR4 catalogues,
+[TilingCatv46.fits](https://www.gama-survey.org/dr4/data/cat/EqInputCat/v46/TilingCatv46.fits) and
+[ExternalSpecAllv07.fits](https://www.gama-survey.org/dr4/data/cat/ExternalSpec/v07/ExternalSpecAllv07.fits).
+To use local copies, pass their directory with `--raw /path/to/catalogues`.
 
-Reusable implementation of the proposed methods.
+```sh
+# Table 4 and the two supplementary case-study tables
+python -B -m case_study.run pointwise > gama-pointwise.json
+python -B -m case_study.run tables gama-pointwise.json
 
-- `main_code/__init__.py`: package marker.
-- `main_code/config.py`: dataclass configurations for neural networks,
-  mutual-information density fitting, and empirical likelihood.
-- `main_code/preprocess.py`: standardization helpers for covariates and outcomes.
-- `main_code/moments.py`: moment functions used in the simulation study.
-- `main_code/nuisance_dr.py`: neural least-squares density-ratio estimation.
-- `main_code/nuisance_mi.py`: neural conditional-density and conditional-moment
-  nuisance estimation.
-- `main_code/crossfit.py`: cross-fitting logic for source nuisance functions
-  and target conditional moments.
-- `main_code/empirical_likelihood.py`: empirical-likelihood objective,
-  profiling, and confidence-interval routines.
-- `main_code/inference.py`: normal and sandwich confidence-interval utilities.
+# Figure 1
+python -B -m case_study.run curve > gama-curve.json
 
-### `simulation/`
+# Supplementary full-source sensitivity analysis
+python -B -m case_study.run full-source > gama-full-source.json
+```
 
-Code and outputs for the main-text simulation figures.
+Figure 1 compares OEL-DW and its simultaneous 95% band with the target and source-only
+curves at 17 quantiles of normalized absolute redshift error. Draw it from the saved fit
+in a separate Python environment with `matplotlib==3.9.2` and `numpy==1.26.4`.
 
-- `simulation/__init__.py`: package marker.
-- `simulation/design.py`: simulation settings, output paths, data-generating
-  mechanisms, and oracle quantities.
-- `simulation/experiment.py`: method wrappers and result-table generation for
-  OM-DW, DRW, target-labelled, source-unadjusted, and oracle benchmarks.
-- `simulation/plot_style.py`: shared plotting style and functions for all
-  simulation panels.
-- `simulation/Figure1.py`: reads `Result_S1.csv` and `Result_S2.csv`, then
-  generates `s1_error_boxplot.png` and `s2_error_boxplot.png`.
-- `simulation/Figure2.py`: reads `Result_S1.csv` and generates `wilks_qq.png`.
-- `simulation/Figure3.py`: reads `Result_S1.csv` and generates
-  `coverage_rate.png` and `ci_length.png`.
-- `simulation/output/Result_S1.csv`: saved simulation results for Scenario S1.
-- `simulation/output/Result_S2.csv`: saved simulation results for Scenario S2.
-- `simulation/output/figures/`: generated simulation figures.
-  The tracked figure files are `s1_error_boxplot.png`, `s2_error_boxplot.png`,
-  `wilks_qq.png`, `coverage_rate.png`, and `ci_length.png`.
+```sh
+python -B -m case_study.plot gama-curve.json gama_error_quantiles.pdf
+```
 
-### `case_study/`
-
-Code, data, and outputs for the empirical air-quality study.
-
-- `case_study/__init__.py`: package marker.
-- `case_study/preprocess.py`: loads raw city files, keeps complete 7:00-18:00
-  observations from 2018-03-01 to 2018-05-31, applies a moving average with
-  window size 20, rebuilds lagged covariates, and saves cleaned tables.
-- `case_study/estimators.py`: empirical-study nuisance fitting, density-ratio
-  fitting, O3 imputation, OM-DW/DRW/benchmark estimating equations, confidence
-  intervals, and diagnostics.
-- `case_study/Figure4.py`: produces `impute-O3.png` and the corresponding
-  prediction tables.
-- `case_study/Figure5.py`: produces `O3-drw.png` and the density-ratio table.
-- `case_study/Figure6.py`: produces `O3-inference.png` and the inference and
-  diagnostic tables.
-- `case_study/data/Beijing.csv`, `case_study/data/Xian.csv`,
-  `case_study/data/Jinan.csv`: source-domain city data.
-- `case_study/data/Taiyuan.csv`: target-domain city data.
-- `case_study/data/Tianjin.csv`: additional raw city file retained with the
-  released data but not used in the main empirical analysis.
-- `case_study/data.zip`: archived copy of the raw city data.
-- `case_study/output/processed/`: cleaned source and target samples generated
-  by `case_study/preprocess.py`.
-  The files are `beijing_spring2018.csv`, `xian_spring2018.csv`,
-  `jinan_spring2018.csv`, `taiyuan_spring2018.csv`, `source_sample.csv`,
-  `target_sample.csv`, and `preprocessing_summary.csv`.
-- `case_study/output/tables/`: CSV tables used to generate the empirical
-  figures.
-  `Figure4_predictions.csv` contains hourly target O3 predictions;
-  `Figure4_daily_predictions.csv` contains daily averages for `impute-O3.png`;
-  `Figure5_density_ratio.csv` contains source density-ratio estimates for
-  `O3-drw.png`; `Figure6_estimates.csv` contains estimates and confidence
-  intervals for `O3-inference.png`; `Figure6_diagnostics.csv` contains tuning
-  and diagnostic summaries.
-- `case_study/output/figures/`: generated empirical-study figures.
-  The tracked figure files are `impute-O3.png`, `O3-drw.png`, and
-  `O3-inference.png`.
-
-
-
-
+The Table 4 Plug-DRF fit fixes the R seed for bandwidth selection. The Figure 1 code
+fits the conditional redshift distribution in all five folds.
